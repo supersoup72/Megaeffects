@@ -75,8 +75,7 @@ class FilterEditorActivity : AppCompatActivity() {
             val idx = if (filterIdx >= 0) filterIdx else layer.filters.size
             val soPath = "${pluginsDir.absolutePath}/filter_$idx.so"
 
-            val result = Compiler.compile(code, soPath, isGlsl,
-                filesDir = this@FilterEditorActivity.filesDir.absolutePath)
+            val result = Compiler.compile(this@FilterEditorActivity, code, soPath, isGlsl)
 
             withContext(Dispatchers.Main) {
                 if (result.success) {
