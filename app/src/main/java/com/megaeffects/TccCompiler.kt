@@ -10,9 +10,17 @@ object TccCompiler {
 
     init {
         try {
+            // Load libtcc first, then the wrapper that depends on it
+            System.loadLibrary("tcc")
+            Log.i("MegaEffects", "libtcc.so loaded")
+        } catch (e: UnsatisfiedLinkError) {
+            Log.w("MegaEffects", "libtcc.so not found: ${e.message}")
+        }
+
+        try {
             System.loadLibrary("tcc_wrapper")
             loaded = true
-            Log.i("MegaEffects", "TCC: ${nativeVersion()}")
+            Log.i("MegaEffects", "tcc_wrapper loaded: ${nativeVersion()}")
         } catch (e: UnsatisfiedLinkError) {
             Log.w("MegaEffects", "tcc_wrapper not loaded: ${e.message}")
         }
@@ -32,11 +40,8 @@ object TccCompiler {
         if (!loaded) {
             return CompileResult(false, "libtcc not available — rebuild APK")
         }
-
-        // Write SDK header to include path
         val sdkDir = File(context.filesDir, "sdk").also { it.mkdirs() }
         File(sdkDir, "filter_sdk.h").writeText(Compiler.SDK_HEADER)
-
         return try {
             val result = nativeCompile(source, outputPath, sdkDir.absolutePath)
             if (result.startsWith("OK")) {
