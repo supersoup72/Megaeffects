@@ -8,10 +8,7 @@ data class CompileResult(val success: Boolean, val message: String)
 
 object Compiler {
 
-    // Public so TccCompiler can use it
-    val SDK_HEADER_PUBLIC = SDK_HEADER
-
-    private val SDK_HEADER = """
+    val SDK_HEADER = """
 #ifndef FILTER_SDK_H
 #define FILTER_SDK_H
 #include <stdint.h>
@@ -58,24 +55,28 @@ static inline vec4 texture_sample(const unsigned char*px,int w,int h,vec2 uv){
 static int _fw,_fh;static double _ft;
 """.trimIndent()
 
+    fun writeSdkHeader(context: Context) {
+        val sdkDir = File(context.filesDir, "sdk").also { it.mkdirs() }
+        File(sdkDir, "filter_sdk.h").writeText(SDK_HEADER)
+    }
+
     fun compile(context: Context, code: String, outputPath: String, isGlsl: Boolean): CompileResult {
         val src = if (isGlsl) buildGlslSource(code) else buildCSource(code, context)
 
-        // Method 1: libtcc via JNI (no SELinux issues, preferred)
+        // Method 1: libtcc via JNI (no SELinux issues)
         if (TccCompiler.isAvailable()) {
             Log.i("MegaEffects", "Compiling via libtcc JNI")
             return TccCompiler.compile(context, src, outputPath)
         }
 
-        // Method 2: subprocess (works on desktop/rooted, fails on stock Android)
+        // Method 2: subprocess fallback
         Log.w("MegaEffects", "libtcc not available, trying subprocess")
         return compileSubprocess(context, src, outputPath)
     }
 
     private fun buildCSource(code: String, context: Context): String {
-        val sdkDir = File(context.filesDir, "sdk").also { it.mkdirs() }
-        File(sdkDir, "filter_sdk.h").writeText(SDK_HEADER)
-        val sdkPath = "${sdkDir.absolutePath}/filter_sdk.h"
+        writeSdkHeader(context)
+        val sdkPath = "${context.filesDir}/sdk/filter_sdk.h"
         return if ("filter_sdk.h" !in code) "#include \"$sdkPath\"\n$code" else code
     }
 
@@ -111,11 +112,9 @@ void filter_process(FilterFrame *f){
     }
 
     private fun compileSubprocess(context: Context, src: String, outputPath: String): CompileResult {
-        val sdkDir = File(context.filesDir, "sdk").also { it.mkdirs() }
-        File(sdkDir, "filter_sdk.h").writeText(SDK_HEADER)
+        writeSdkHeader(context)
         val srcFile = File(context.filesDir, "filter_tmp.c")
         srcFile.writeText(src)
-
         val candidates = listOf(
             "/data/data/com.termux/files/usr/bin/tcc",
             "/data/data/com.termux/files/usr/bin/clang",
@@ -124,26 +123,23 @@ void filter_process(FilterFrame *f){
         val tcc = candidates.firstOrNull { path ->
             try { File(path).also { it.setExecutable(true) }.canExecute() } catch (e: Exception) { false }
         } ?: return CompileResult(false,
-            "No compiler available.\nlibtcc not bundled and no subprocess compiler found.\nRebuild APK to bundle libtcc.")
-
+            "No compiler available.\nRebuild APK to bundle libtcc.")
         return try {
             val proc = ProcessBuilder(tcc, "-shared",
-                "-I${sdkDir.absolutePath}", "-o", outputPath,
+                "-I${context.filesDir}/sdk", "-o", outputPath,
                 srcFile.absolutePath, "-lm")
                 .redirectErrorStream(true)
-                .also { pb ->
-                    pb.environment()["LD_LIBRARY_PATH"] = "/data/data/com.termux/files/usr/lib"
-                }
+                .also { pb -> pb.environment()["LD_LIBRARY_PATH"] = "/data/data/com.termux/files/usr/lib" }
                 .start()
             val output = proc.inputStream.bufferedReader().readText()
             val exit = proc.waitFor()
             srcFile.delete()
             if (exit == 0 && File(outputPath).exists())
-                CompileResult(true, "Compiled OK (subprocess)")
+                CompileResult(true, "Compiled OK")
             else
                 CompileResult(false, output.take(500).ifBlank { "Exit $exit" })
         } catch (e: Exception) {
-            CompileResult(false, "Subprocess error: ${e.message}")
+            CompileResult(false, "Error: ${e.message}")
         }
     }
 }

@@ -22,7 +22,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         requestPermissions()
-        Compiler.extractAssets(this)
 
         recycler   = findViewById(R.id.recycler)
         emptyText  = findViewById(R.id.empty_text)

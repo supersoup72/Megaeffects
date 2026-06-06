@@ -35,7 +35,7 @@ object TccCompiler {
 
         // Write SDK header to include path
         val sdkDir = File(context.filesDir, "sdk").also { it.mkdirs() }
-        File(sdkDir, "filter_sdk.h").writeText(Compiler.SDK_HEADER_PUBLIC)
+        File(sdkDir, "filter_sdk.h").writeText(Compiler.SDK_HEADER)
 
         return try {
             val result = nativeCompile(source, outputPath, sdkDir.absolutePath)
