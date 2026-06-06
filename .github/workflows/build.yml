@@ -22,66 +22,46 @@ jobs:
 
       - name: Download TCC for Android ARM64
         run: |
-          echo "=== Downloading TCC from Termux repo ==="
-          # Get package index
+          echo "=== Trying Termux package repo ==="
           wget -q "https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages.gz" \
-            -O /tmp/Packages.gz
-          gunzip /tmp/Packages.gz
+            -O /tmp/Packages.gz && gunzip /tmp/Packages.gz || true
 
-          # Find tcc package URL
-          TCC_FILE=$(awk '/^Package: tcc$/{found=1} found && /^Filename:/{print $2; exit}' /tmp/Packages)
-          echo "TCC package: $TCC_FILE"
+          TCC_FILE=$(awk '/^Package: tcc$/{found=1} found && /^Filename:/{print $2; exit}' /tmp/Packages 2>/dev/null)
+          echo "TCC path: $TCC_FILE"
 
           if [ -n "$TCC_FILE" ]; then
             wget -q "https://packages.termux.dev/apt/termux-main/$TCC_FILE" -O /tmp/tcc.deb
-            echo "Downloaded: $(wc -c < /tmp/tcc.deb) bytes"
-
-            # Extract .deb
-            mkdir -p /tmp/tcc_extract
-            cd /tmp/tcc_extract
+            mkdir -p /tmp/tcc_extract && cd /tmp/tcc_extract
             ar x /tmp/tcc.deb
-            ls -la
-            # Extract data archive
             for f in data.tar.xz data.tar.gz data.tar.zst data.tar; do
               [ -f "$f" ] && tar xf "$f" && break
             done
             TCC_BIN=$(find . -name "tcc" -type f | head -1)
-            echo "TCC binary: $TCC_BIN"
             if [ -n "$TCC_BIN" ]; then
+              mkdir -p $GITHUB_WORKSPACE/app/src/main/assets
               cp "$TCC_BIN" $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64
-              chmod +x $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64
-              echo "TCC bundled: $(wc -c < $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64) bytes"
+              echo "TCC from Termux: $(wc -c < $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64) bytes"
             fi
           fi
 
-          if [ ! -s app/src/main/assets/tcc_arm64 ]; then
-            echo "=== Fallback: Build TCC from source ==="
-            NDK=/usr/local/lib/android/sdk/ndk/25.1.8937393
-            CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
-            SYSROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
+      - name: Build TCC from source (fallback)
+        if: ${{ !hashFiles('app/src/main/assets/tcc_arm64') }}
+        run: |
+          NDK=/usr/local/lib/android/sdk/ndk/25.1.8937393
+          CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+          SYSROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
 
-            git clone --depth=1 https://github.com/TinyCC/tinycc /tmp/tinycc
-            cd /tmp/tinycc
+          git clone --depth=1 https://github.com/TinyCC/tinycc /tmp/tinycc
+          cd /tmp/tinycc
 
-            python3 -c "
-src=open('include/tccdefs.h','rb').read()
-out='static const char tccdefs_str[]={\n'
-for i,b in enumerate(src): out+=str(b)+','; out+='\n' if (i+1)%16==0 else ''
-out+='0};\n'
-open('tccdefs_.h','w').write(out)
-print('tccdefs_.h done')
-"
-            printf '#define CONFIG_TCCDIR ""\n#define CONFIG_TCC_SYSINCLUDEPATHS "/data/data/com.termux/files/usr/include"\n#define CONFIG_TCC_LIBPATHS "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_CRTPREFIX "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_ELFINTERP "/system/bin/linker64"\n#define CONFIG_VERSION "0.9.27"\n#define TCC_VERSION "0.9.27"\n#define GCC_MAJOR 12\n#define GCC_MINOR 0\n#define TCC_TARGET_ARM64 1\n#define ONE_SOURCE 1\n' > config.h
+          python3 $GITHUB_WORKSPACE/scripts/gen_tccdefs.py include/tccdefs.h tccdefs_.h
 
-            $CC -DONE_SOURCE=1 -fPIC -fPIE --sysroot=$SYSROOT \
-              -o $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64 tcc.c -lm 2>&1 | tail -5
+          printf '#define CONFIG_TCCDIR ""\n#define CONFIG_TCC_SYSINCLUDEPATHS "/data/data/com.termux/files/usr/include"\n#define CONFIG_TCC_LIBPATHS "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_CRTPREFIX "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_ELFINTERP "/system/bin/linker64"\n#define CONFIG_VERSION "0.9.27"\n#define TCC_VERSION "0.9.27"\n#define GCC_MAJOR 12\n#define GCC_MINOR 0\n#define TCC_TARGET_ARM64 1\n#define ONE_SOURCE 1\n' > config.h
 
-            if [ -s $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64 ]; then
-              echo "TCC built from source: $(wc -c < $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64) bytes"
-            else
-              echo "WARNING: TCC not available"
-            fi
-          fi
+          $CC -DONE_SOURCE=1 -fPIC -fPIE --sysroot=$SYSROOT \
+            -o $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64 tcc.c -lm 2>&1 | tail -5
+
+          ls -la $GITHUB_WORKSPACE/app/src/main/assets/ || true
 
       - name: Cache Gradle
         uses: actions/cache@v4
