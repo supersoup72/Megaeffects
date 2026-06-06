@@ -22,53 +22,43 @@ jobs:
 
       - name: Build libtcc.so for Android ARM64
         run: |
-          # Find whatever NDK version is installed
           NDK=$(ls -d /usr/local/lib/android/sdk/ndk/* 2>/dev/null | head -1)
           echo "Using NDK: $NDK"
           CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
-          AR=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           SYSROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
 
-          echo "=== Clone TinyCC ==="
           git clone --depth=1 https://github.com/TinyCC/tinycc /tmp/tinycc
           cd /tmp/tinycc
 
-          echo "=== Generate tccdefs_.h ==="
+          echo "=== TCC source files ==="
+          ls -la *.c | head -20
+
           python3 $GITHUB_WORKSPACE/scripts/gen_tccdefs.py include/tccdefs.h tccdefs_.h
           echo "tccdefs_.h: $(wc -c < tccdefs_.h) bytes"
 
-          echo "=== Generate config.h ==="
-          printf '%s\n' \
-            '#define CONFIG_TCCDIR ""' \
-            '#define CONFIG_TCC_SYSINCLUDEPATHS "/data/data/com.termux/files/usr/include"' \
-            '#define CONFIG_TCC_LIBPATHS "/data/data/com.termux/files/usr/lib"' \
-            '#define CONFIG_TCC_CRTPREFIX "/data/data/com.termux/files/usr/lib"' \
-            '#define CONFIG_TCC_ELFINTERP "/system/bin/linker64"' \
-            '#define CONFIG_VERSION "0.9.27"' \
-            '#define TCC_VERSION "0.9.27"' \
-            '#define GCC_MAJOR 12' \
-            '#define GCC_MINOR 0' \
-            '#define TCC_TARGET_ARM64 1' \
-            '#define ONE_SOURCE 1' \
-            > config.h
+          printf '#define CONFIG_TCCDIR ""\n#define CONFIG_TCC_SYSINCLUDEPATHS "/data/data/com.termux/files/usr/include"\n#define CONFIG_TCC_LIBPATHS "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_CRTPREFIX "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_ELFINTERP "/system/bin/linker64"\n#define CONFIG_VERSION "0.9.27"\n#define TCC_VERSION "0.9.27"\n#define GCC_MAJOR 12\n#define GCC_MINOR 0\n#define TCC_TARGET_ARM64 1\n#define ONE_SOURCE 1\n' > config.h
 
-          echo "=== Build libtcc.so ==="
-          $CC \
-            -DONE_SOURCE=1 \
-            -DLIBTCC \
-            -shared -fPIC \
+          SRC=tcc.c
+          [ -f libtcc.c ] && SRC=libtcc.c
+          echo "Using source: $SRC"
+
+          $CC -DONE_SOURCE=1 -DLIBTCC=1 -shared -fPIC \
             --sysroot=$SYSROOT \
-            -o libtcc.so \
-            libtcc.c -lm 2>&1
+            -o libtcc.so $SRC -lm 2>&1
+
+          echo "=== Build result ==="
+          ls -la libtcc.so 2>/dev/null || echo "libtcc.so NOT built"
 
           if [ -s libtcc.so ]; then
-            echo "libtcc.so: $(wc -c < libtcc.so) bytes"
             file libtcc.so
             mkdir -p $GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a
             cp libtcc.so $GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libtcc.so
-            echo "libtcc.so bundled in jniLibs!"
+            echo "SUCCESS: libtcc.so bundled ($(wc -c < libtcc.so) bytes)"
           else
-            echo "WARNING: libtcc.so build failed"
+            echo "FAILED: trying verbose output"
+            $CC -DONE_SOURCE=1 -DLIBTCC=1 -shared -fPIC \
+              --sysroot=$SYSROOT -o libtcc2.so $SRC -lm -v 2>&1 | tail -40
+            exit 1
           fi
 
       - name: Cache Gradle
