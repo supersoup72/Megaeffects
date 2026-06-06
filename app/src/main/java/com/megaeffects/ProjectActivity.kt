@@ -340,19 +340,24 @@ class ProjectActivity : AppCompatActivity() {
         if (requestCode == PICK_FILE && resultCode == RESULT_OK) {
             val uri = data?.data ?: return
             val path = getRealPath(uri)
-            pendingSrcInput?.setText(path ?: uri.toString())
+            pendingSrcInput?.setText(path)
             pendingSrcInput = null
         }
     }
 
-    private fun getRealPath(uri: Uri): String? {
+    private fun getRealPath(uri: Uri): String {
+        // Try to get real path first
         return try {
             val cursor = contentResolver.query(uri,
                 arrayOf(MediaStore.MediaColumns.DATA), null, null, null)
-            cursor?.use {
+            val path = cursor?.use {
                 if (it.moveToFirst()) it.getString(0) else null
             }
-        } catch (e: Exception) { uri.path }
+            // Return content URI string if real path not available
+            path?.takeIf { it.isNotBlank() } ?: uri.toString()
+        } catch (e: Exception) {
+            uri.toString() // Fall back to content URI string
+        }
     }
 
     // ── Settings ──────────────────────────────────────────────────────────────

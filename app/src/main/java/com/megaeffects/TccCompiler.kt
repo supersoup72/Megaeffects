@@ -7,48 +7,51 @@ import java.io.File
 object TccCompiler {
 
     private var loaded = false
+    private var loadError = ""
 
     init {
+        // libtcc.so must be loaded before tcc_wrapper
         try {
-            // Load libtcc first, then the wrapper that depends on it
             System.loadLibrary("tcc")
-            Log.i("MegaEffects", "libtcc.so loaded")
+            Log.i("MegaEffects", "libtcc.so loaded OK")
         } catch (e: UnsatisfiedLinkError) {
-            Log.w("MegaEffects", "libtcc.so not found: ${e.message}")
+            loadError += "libtcc: ${e.message}\n"
+            Log.e("MegaEffects", "libtcc.so failed: ${e.message}")
         }
 
         try {
             System.loadLibrary("tcc_wrapper")
             loaded = true
-            Log.i("MegaEffects", "tcc_wrapper loaded: ${nativeVersion()}")
+            Log.i("MegaEffects", "tcc_wrapper loaded OK: ${nativeVersion()}")
         } catch (e: UnsatisfiedLinkError) {
-            Log.w("MegaEffects", "tcc_wrapper not loaded: ${e.message}")
+            loadError += "tcc_wrapper: ${e.message}"
+            Log.e("MegaEffects", "tcc_wrapper failed: ${e.message}")
         }
     }
 
     fun isAvailable() = loaded
+    fun getLoadError() = loadError
 
     private external fun nativeCompile(
-        source: String,
-        outputPath: String,
-        includePath: String
+        source: String, outputPath: String, includePath: String
     ): String
-
     external fun nativeVersion(): String
 
     fun compile(context: Context, source: String, outputPath: String): CompileResult {
         if (!loaded) {
-            return CompileResult(false, "libtcc not available — rebuild APK")
+            return CompileResult(false,
+                "libtcc load failed:\n$loadError\n\n" +
+                "libtcc IS in APK — this is a runtime linking error.\n" +
+                "Check logcat for details.")
         }
         val sdkDir = File(context.filesDir, "sdk").also { it.mkdirs() }
         File(sdkDir, "filter_sdk.h").writeText(Compiler.SDK_HEADER)
         return try {
             val result = nativeCompile(source, outputPath, sdkDir.absolutePath)
-            if (result.startsWith("OK")) {
+            if (result.startsWith("OK"))
                 CompileResult(true, "Compiled OK (libtcc)")
-            } else {
+            else
                 CompileResult(false, result.removePrefix("ERROR:").trim())
-            }
         } catch (e: Exception) {
             CompileResult(false, "JNI error: ${e.message}")
         }

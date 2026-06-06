@@ -22,6 +22,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         requestPermissions()
+        RenderEngine.appContext = applicationContext
 
         recycler   = findViewById(R.id.recycler)
         emptyText  = findViewById(R.id.empty_text)
