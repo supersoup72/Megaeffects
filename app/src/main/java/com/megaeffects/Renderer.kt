@@ -6,25 +6,26 @@ import android.util.Log
 object Renderer {
 
     fun renderFrame(project: Project, timeSec: Float): Bitmap {
-        val width = project.width
+        val width  = project.width
         val height = project.height
-        val renderedLayers = mutableListOf<ByteArray?>()
+        val rendered = mutableListOf<ByteArray?>()
 
         for (layer in project.layers) {
-            if (!layer.visible) { renderedLayers.add(null); continue }
-            if (timeSec < layer.start || timeSec > layer.end) {
-                renderedLayers.add(null); continue
-            }
+            if (!layer.visible) { rendered.add(null); continue }
+            if (timeSec < layer.start || timeSec > layer.end) { rendered.add(null); continue }
 
             val clipTime = timeSec - layer.start
-            val clipDuration = layer.end - layer.start
 
             val pixels: ByteArray = try {
-                when (layer.sourceType) {
-                    "video" -> RenderEngine.extractVideoFrame(layer.source, clipTime, width, height)
-                        ?: RenderEngine.fill(width, height, layer.color)
-                    "image" -> RenderEngine.loadImage(layer.source, width, height)
-                        ?: RenderEngine.fill(width, height, layer.color)
+                when {
+                    layer.sourceType == "video" && layer.source.isNotBlank() ->
+                        RenderEngine.extractVideoFrame(layer.source, clipTime, width, height)
+                            ?: RenderEngine.fill(width, height, layer.color)
+
+                    layer.sourceType == "image" && layer.source.isNotBlank() ->
+                        RenderEngine.loadImage(layer.source, width, height)
+                            ?: RenderEngine.fill(width, height, layer.color)
+
                     else -> RenderEngine.fill(width, height, layer.color)
                 }
             } catch (e: Exception) {
@@ -32,13 +33,11 @@ object Renderer {
                 RenderEngine.fill(width, height, intArrayOf(60, 60, 60, 255))
             }
 
-            // Apply transform
-            val transform = Keyframes.getTransformAtTime(layer, clipTime)
-            val transformed = RenderEngine.transform(pixels, width, height, transform)
-            renderedLayers.add(transformed)
+            val t = Keyframes.getTransformAtTime(layer, clipTime)
+            rendered.add(RenderEngine.transform(pixels, width, height, t))
         }
 
-        val composited = RenderEngine.compositeLayers(renderedLayers, width, height)
+        val composited = RenderEngine.compositeLayers(rendered, width, height)
         return RenderEngine.rgbaToBitmap(composited, width, height)
     }
 }

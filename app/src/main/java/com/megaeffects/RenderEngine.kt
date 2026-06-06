@@ -2,6 +2,8 @@ package com.megaeffects
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Matrix
 import android.media.MediaMetadataRetriever
 import android.util.Log
 
@@ -20,8 +22,6 @@ object RenderEngine {
     }
 
     fun isAvailable() = engineLoaded
-
-    // ── JNI declarations ──────────────────────────────────────────────────────
 
     private external fun nativeComposite(canvas: ByteArray, layer: ByteArray, width: Int, height: Int)
     private external fun nativeTransform(
@@ -53,9 +53,7 @@ object RenderEngine {
             nativeTransform(pixels, width, height, tx, ty,
                 t.scaleX, t.scaleY, t.rotateZ, t.rotateX, t.rotateY,
                 t.opacity, t.perspective)
-        } else {
-            pixels // fallback: no transform
-        }
+        } else pixels
     }
 
     fun fill(width: Int, height: Int, color: IntArray): ByteArray {
@@ -66,21 +64,19 @@ object RenderEngine {
         return if (engineLoaded) {
             nativeFill(width, height, r, g, b, a)
         } else {
-            ByteArray(width * height * 4) { i ->
-                when (i % 4) {
-                    0 -> r.toByte(); 1 -> g.toByte()
-                    2 -> b.toByte(); else -> a.toByte()
+            ByteArray(width * height * 4).also { buf ->
+                for (i in 0 until width * height) {
+                    buf[i*4]=r.toByte(); buf[i*4+1]=g.toByte()
+                    buf[i*4+2]=b.toByte(); buf[i*4+3]=a.toByte()
                 }
             }
         }
     }
 
     fun compositeLayers(layers: List<ByteArray?>, width: Int, height: Int): ByteArray {
-        var canvas = fill(width, height, intArrayOf(0, 0, 0, 0))
+        var canvas = fill(width, height, intArrayOf(0, 0, 0, 255))
         for (layer in layers) {
-            if (layer != null) {
-                canvas = composite(canvas, layer, width, height)
-            }
+            if (layer != null) canvas = composite(canvas, layer, width, height)
         }
         return canvas
     }
@@ -93,6 +89,7 @@ object RenderEngine {
             retriever.setDataSource(path)
             val timeUs = (timeSec * 1_000_000).toLong()
             val bitmap = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                ?: retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
             retriever.release()
             bitmap?.let { bitmapToRgba(it, width, height) }
         } catch (e: Exception) {
@@ -103,7 +100,11 @@ object RenderEngine {
 
     fun loadImage(path: String, width: Int, height: Int): ByteArray? {
         return try {
-            val bitmap = BitmapFactory.decodeFile(path) ?: return null
+            val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888 }
+            val bitmap = BitmapFactory.decodeFile(path, opts) ?: run {
+                Log.e("MegaEffects", "Failed to decode image: $path")
+                return null
+            }
             bitmapToRgba(bitmap, width, height)
         } catch (e: Exception) {
             Log.e("MegaEffects", "Image load error: ${e.message}")
@@ -112,18 +113,26 @@ object RenderEngine {
     }
 
     fun bitmapToRgba(bitmap: Bitmap, width: Int, height: Int): ByteArray {
-        val scaled = Bitmap.createScaledBitmap(bitmap, width, height, true)
-        val rgba = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = android.graphics.Canvas(rgba)
-        canvas.drawBitmap(scaled, 0f, 0f, null)
-        val buf = ByteArray(width * height * 4)
+        // Scale bitmap to target size
+        val scaled = if (bitmap.width != width || bitmap.height != height) {
+            Bitmap.createScaledBitmap(bitmap, width, height, true)
+        } else bitmap
+
+        // Ensure ARGB_8888 format
+        val argb = if (scaled.config != Bitmap.Config.ARGB_8888) {
+            scaled.copy(Bitmap.Config.ARGB_8888, false)
+        } else scaled
+
         val intBuf = IntArray(width * height)
-        rgba.getPixels(intBuf, 0, width, 0, 0, width, height)
+        argb.getPixels(intBuf, 0, width, 0, 0, width, height)
+
+        // Convert Android ARGB to RGBA bytes
+        val buf = ByteArray(width * height * 4)
         for (i in intBuf.indices) {
             val px = intBuf[i]
             buf[i * 4]     = ((px shr 16) and 0xFF).toByte() // R
             buf[i * 4 + 1] = ((px shr 8)  and 0xFF).toByte() // G
-            buf[i * 4 + 2] = ((px)        and 0xFF).toByte() // B
+            buf[i * 4 + 2] = (px          and 0xFF).toByte() // B
             buf[i * 4 + 3] = ((px shr 24) and 0xFF).toByte() // A
         }
         return buf
@@ -133,7 +142,7 @@ object RenderEngine {
         val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val intBuf = IntArray(width * height)
         for (i in intBuf.indices) {
-            val r = pixels[i * 4].toInt() and 0xFF
+            val r = pixels[i * 4    ].toInt() and 0xFF
             val g = pixels[i * 4 + 1].toInt() and 0xFF
             val b = pixels[i * 4 + 2].toInt() and 0xFF
             val a = pixels[i * 4 + 3].toInt() and 0xFF
@@ -143,19 +152,18 @@ object RenderEngine {
         return bmp
     }
 
-    // ── Fallback compositor (no JNI) ──────────────────────────────────────────
+    // ── Fallback compositor ───────────────────────────────────────────────────
 
     private fun compositeFallback(canvas: ByteArray, src: ByteArray, width: Int, height: Int): ByteArray {
         val dst = canvas.copyOf()
         val n = width * height
         for (i in 0 until n) {
             val si = i * 4
-            val sa = (src[si + 3].toInt() and 0xFF)
+            val sa = src[si + 3].toInt() and 0xFF
             if (sa == 0) continue
-            val da = (dst[si + 3].toInt() and 0xFF)
+            val da = dst[si + 3].toInt() and 0xFF
             if (sa == 255) {
-                dst[si] = src[si]; dst[si+1] = src[si+1]
-                dst[si+2] = src[si+2]; dst[si+3] = src[si+3]
+                dst[si]=src[si]; dst[si+1]=src[si+1]; dst[si+2]=src[si+2]; dst[si+3]=src[si+3]
                 continue
             }
             val oa = sa + da - (sa * da + 127) / 255
@@ -163,7 +171,7 @@ object RenderEngine {
             for (c in 0..2) {
                 val sv = src[si+c].toInt() and 0xFF
                 val dv = dst[si+c].toInt() and 0xFF
-                dst[si+c] = ((sv*sa + dv*da - dv*da*sa/255 + oa/2) / oa).toByte()
+                dst[si+c] = ((sv*sa + dv*da - dv*da*sa/255 + oa/2) / oa).coerceIn(0,255).toByte()
             }
             dst[si+3] = oa.coerceIn(0, 255).toByte()
         }

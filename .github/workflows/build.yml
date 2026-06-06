@@ -23,43 +23,40 @@ jobs:
       - name: Build libtcc.so for Android ARM64
         run: |
           NDK=$(ls -d /usr/local/lib/android/sdk/ndk/* 2>/dev/null | head -1)
-          echo "Using NDK: $NDK"
           CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
           SYSROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
+          DEST=$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a
+          mkdir -p $DEST
 
           git clone --depth=1 https://github.com/TinyCC/tinycc /tmp/tinycc
           cd /tmp/tinycc
 
-          echo "=== TCC source files ==="
-          ls -la *.c | head -20
-
           python3 $GITHUB_WORKSPACE/scripts/gen_tccdefs.py include/tccdefs.h tccdefs_.h
-          echo "tccdefs_.h: $(wc -c < tccdefs_.h) bytes"
 
           printf '#define CONFIG_TCCDIR ""\n#define CONFIG_TCC_SYSINCLUDEPATHS "/data/data/com.termux/files/usr/include"\n#define CONFIG_TCC_LIBPATHS "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_CRTPREFIX "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_ELFINTERP "/system/bin/linker64"\n#define CONFIG_VERSION "0.9.27"\n#define TCC_VERSION "0.9.27"\n#define GCC_MAJOR 12\n#define GCC_MINOR 0\n#define TCC_TARGET_ARM64 1\n#define ONE_SOURCE 1\n' > config.h
 
           SRC=tcc.c
           [ -f libtcc.c ] && SRC=libtcc.c
-          echo "Using source: $SRC"
 
           $CC -DONE_SOURCE=1 -DLIBTCC=1 -shared -fPIC \
-            --sysroot=$SYSROOT \
-            -o libtcc.so $SRC -lm 2>&1
+            --sysroot=$SYSROOT -o $DEST/libtcc.so $SRC -lm 2>&1
 
-          echo "=== Build result ==="
-          ls -la libtcc.so 2>/dev/null || echo "libtcc.so NOT built"
-
-          if [ -s libtcc.so ]; then
-            file libtcc.so
-            mkdir -p $GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a
-            cp libtcc.so $GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libtcc.so
-            echo "SUCCESS: libtcc.so bundled ($(wc -c < libtcc.so) bytes)"
+          echo ""
+          echo "================================================"
+          echo "LIBTCC BUILD RESULT:"
+          if [ -s $DEST/libtcc.so ]; then
+            echo "  SUCCESS - libtcc.so bundled!"
+            echo "  Size: $(wc -c < $DEST/libtcc.so) bytes"
+            file $DEST/libtcc.so
           else
-            echo "FAILED: trying verbose output"
+            echo "  FAILED - libtcc.so not built"
+            echo "  Retrying with verbose output:"
             $CC -DONE_SOURCE=1 -DLIBTCC=1 -shared -fPIC \
-              --sysroot=$SYSROOT -o libtcc2.so $SRC -lm -v 2>&1 | tail -40
+              --sysroot=$SYSROOT -o /tmp/libtcc_test.so $SRC -lm -v 2>&1 | tail -20
             exit 1
           fi
+          echo "================================================"
+          echo ""
 
       - name: Cache Gradle
         uses: actions/cache@v4
@@ -77,6 +74,14 @@ jobs:
         run: ./gradlew assembleDebug
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Xmx4g"
+
+      - name: Show libtcc in APK
+        run: |
+          APK=$(find app/build/outputs/apk/debug -name "*.apk" | head -1)
+          echo "================================================"
+          echo "LIBTCC IN APK:"
+          unzip -l $APK | grep -i "tcc" || echo "  NOT FOUND in APK!"
+          echo "================================================"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
