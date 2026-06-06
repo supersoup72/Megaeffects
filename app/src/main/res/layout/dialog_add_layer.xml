@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:padding="16dp">
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Layer name:" android:textColor="#FFFFFF"/>
+    <EditText android:id="@+id/input_name" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="New Layer" android:inputType="text"/>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Type:" android:textColor="#FFFFFF" android:layout_marginTop="8dp"/>
+    <RadioGroup android:id="@+id/radio_type" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:orientation="horizontal">
+        <RadioButton android:id="@+id/radio_color" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="Color" android:checked="true"
+            android:textColor="#FFFFFF"/>
+        <RadioButton android:id="@+id/radio_video" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="Video" android:textColor="#FFFFFF"
+            android:layout_marginStart="12dp"/>
+        <RadioButton android:id="@+id/radio_image" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="Image" android:textColor="#FFFFFF"
+            android:layout_marginStart="12dp"/>
+    </RadioGroup>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Source:" android:textColor="#FFFFFF" android:layout_marginTop="8dp"/>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <EditText android:id="@+id/input_source" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:hint="Path or tap Browse" android:inputType="text"/>
+        <Button android:id="@+id/btn_browse" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="Browse"
+            android:layout_marginStart="4dp"/>
+    </LinearLayout>
+</LinearLayout>

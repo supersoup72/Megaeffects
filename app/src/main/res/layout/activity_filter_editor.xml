@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@color/bg_dark">
+
+    <!-- Top bar -->
+    <LinearLayout android:layout_width="match_parent" android:layout_height="48dp"
+        android:orientation="horizontal" android:background="@color/bg_card"
+        android:gravity="center_vertical" android:padding="4dp">
+        <Button android:id="@+id/btn_back" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="Back" android:textSize="12sp"
+            android:backgroundTint="@color/bg_surface"/>
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:text="Filter Editor"
+            android:textColor="@color/text_primary" android:textSize="15sp"
+            android:textStyle="bold" android:paddingStart="8dp"/>
+        <Button android:id="@+id/btn_filters_list" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="List" android:textSize="11sp"
+            android:backgroundTint="@color/bg_surface"/>
+    </LinearLayout>
+
+    <!-- Mode selector -->
+    <RadioGroup android:id="@+id/mode_group" android:layout_width="match_parent"
+        android:layout_height="44dp" android:orientation="horizontal"
+        android:background="@color/bg_surface" android:gravity="center_vertical"
+        android:paddingHorizontal="8dp">
+        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Mode:" android:textColor="@color/text_secondary" android:paddingEnd="8dp"/>
+        <RadioButton android:id="@+id/radio_c" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="C" android:checked="true"
+            android:textColor="@color/text_primary"/>
+        <RadioButton android:id="@+id/radio_glsl" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="GLSL"
+            android:textColor="@color/text_primary" android:layout_marginStart="16dp"/>
+    </RadioGroup>
+
+    <!-- Code editor -->
+    <EditText android:id="@+id/code_input"
+        android:layout_width="match_parent" android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fontFamily="monospace" android:textSize="12sp"
+        android:textColor="@color/text_primary" android:background="@color/bg_dark"
+        android:gravity="top|start" android:inputType="textMultiLine"
+        android:padding="8dp" android:scrollbars="vertical"/>
+
+    <!-- Status -->
+    <TextView android:id="@+id/status_text"
+        android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:text="" android:textSize="12sp" android:padding="8dp"
+        android:minHeight="40dp"/>
+
+    <!-- Compile button -->
+    <Button android:id="@+id/btn_compile"
+        android:layout_width="match_parent" android:layout_height="52dp"
+        android:text="Compile and Save" android:textSize="14sp"
+        android:backgroundTint="@color/accent_blue"/>
+
+</LinearLayout>

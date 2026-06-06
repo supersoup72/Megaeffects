@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- dialog_new_project.xml -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="vertical" android:padding="16dp">
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Project name:" android:textColor="#FFFFFF"/>
+    <EditText android:id="@+id/input_name" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="My Project"
+        android:inputType="text"/>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Duration (seconds):" android:textColor="#FFFFFF" android:layout_marginTop="8dp"/>
+    <EditText android:id="@+id/input_duration" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:text="10"
+        android:inputType="numberDecimal"/>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="Resolution:" android:textColor="#FFFFFF" android:layout_marginTop="8dp"/>
+    <Spinner android:id="@+id/spinner_res" android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
+</LinearLayout>
