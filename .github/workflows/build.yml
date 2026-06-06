@@ -20,48 +20,54 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Download TCC for Android ARM64
-        run: |
-          echo "=== Trying Termux package repo ==="
-          wget -q "https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages.gz" \
-            -O /tmp/Packages.gz && gunzip /tmp/Packages.gz || true
-
-          TCC_FILE=$(awk '/^Package: tcc$/{found=1} found && /^Filename:/{print $2; exit}' /tmp/Packages 2>/dev/null)
-          echo "TCC path: $TCC_FILE"
-
-          if [ -n "$TCC_FILE" ]; then
-            wget -q "https://packages.termux.dev/apt/termux-main/$TCC_FILE" -O /tmp/tcc.deb
-            mkdir -p /tmp/tcc_extract && cd /tmp/tcc_extract
-            ar x /tmp/tcc.deb
-            for f in data.tar.xz data.tar.gz data.tar.zst data.tar; do
-              [ -f "$f" ] && tar xf "$f" && break
-            done
-            TCC_BIN=$(find . -name "tcc" -type f | head -1)
-            if [ -n "$TCC_BIN" ]; then
-              mkdir -p $GITHUB_WORKSPACE/app/src/main/assets
-              cp "$TCC_BIN" $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64
-              echo "TCC from Termux: $(wc -c < $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64) bytes"
-            fi
-          fi
-
-      - name: Build TCC from source (fallback)
-        if: ${{ !hashFiles('app/src/main/assets/tcc_arm64') }}
+      - name: Build libtcc.so for Android ARM64
         run: |
           NDK=/usr/local/lib/android/sdk/ndk/25.1.8937393
           CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+          AR=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           SYSROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
 
+          echo "=== Clone TinyCC ==="
           git clone --depth=1 https://github.com/TinyCC/tinycc /tmp/tinycc
           cd /tmp/tinycc
 
+          echo "=== Generate tccdefs_.h ==="
           python3 $GITHUB_WORKSPACE/scripts/gen_tccdefs.py include/tccdefs.h tccdefs_.h
+          echo "tccdefs_.h: $(wc -c < tccdefs_.h) bytes"
 
-          printf '#define CONFIG_TCCDIR ""\n#define CONFIG_TCC_SYSINCLUDEPATHS "/data/data/com.termux/files/usr/include"\n#define CONFIG_TCC_LIBPATHS "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_CRTPREFIX "/data/data/com.termux/files/usr/lib"\n#define CONFIG_TCC_ELFINTERP "/system/bin/linker64"\n#define CONFIG_VERSION "0.9.27"\n#define TCC_VERSION "0.9.27"\n#define GCC_MAJOR 12\n#define GCC_MINOR 0\n#define TCC_TARGET_ARM64 1\n#define ONE_SOURCE 1\n' > config.h
+          echo "=== Generate config.h ==="
+          printf '%s\n' \
+            '#define CONFIG_TCCDIR ""' \
+            '#define CONFIG_TCC_SYSINCLUDEPATHS "/data/data/com.termux/files/usr/include"' \
+            '#define CONFIG_TCC_LIBPATHS "/data/data/com.termux/files/usr/lib"' \
+            '#define CONFIG_TCC_CRTPREFIX "/data/data/com.termux/files/usr/lib"' \
+            '#define CONFIG_TCC_ELFINTERP "/system/bin/linker64"' \
+            '#define CONFIG_VERSION "0.9.27"' \
+            '#define TCC_VERSION "0.9.27"' \
+            '#define GCC_MAJOR 12' \
+            '#define GCC_MINOR 0' \
+            '#define TCC_TARGET_ARM64 1' \
+            '#define ONE_SOURCE 1' \
+            > config.h
 
-          $CC -DONE_SOURCE=1 -fPIC -fPIE --sysroot=$SYSROOT \
-            -o $GITHUB_WORKSPACE/app/src/main/assets/tcc_arm64 tcc.c -lm 2>&1 | tail -5
+          echo "=== Build libtcc.so ==="
+          $CC \
+            -DONE_SOURCE=1 \
+            -DLIBTCC \
+            -shared -fPIC \
+            --sysroot=$SYSROOT \
+            -o libtcc.so \
+            libtcc.c -lm 2>&1
 
-          ls -la $GITHUB_WORKSPACE/app/src/main/assets/ || true
+          if [ -s libtcc.so ]; then
+            echo "libtcc.so: $(wc -c < libtcc.so) bytes"
+            file libtcc.so
+            mkdir -p $GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a
+            cp libtcc.so $GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libtcc.so
+            echo "libtcc.so bundled in jniLibs!"
+          else
+            echo "WARNING: libtcc.so build failed"
+          fi
 
       - name: Cache Gradle
         uses: actions/cache@v4
