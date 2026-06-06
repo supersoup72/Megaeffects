@@ -1,11 +1,10 @@
 cmake_minimum_required(VERSION 3.22.1)
 project("megaeffects")
 
-# Render engine - compiled with NEON optimizations for ARM64
+# Only compile jni_bridge.c - it includes render_engine.c internally
 add_library(
     render_engine
     SHARED
-    render_engine.c
     jni_bridge.c
 )
 
