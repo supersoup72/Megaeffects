@@ -22,7 +22,9 @@ jobs:
 
       - name: Build libtcc.so for Android ARM64
         run: |
-          NDK=/usr/local/lib/android/sdk/ndk/25.1.8937393
+          # Find whatever NDK version is installed
+          NDK=$(ls -d /usr/local/lib/android/sdk/ndk/* 2>/dev/null | head -1)
+          echo "Using NDK: $NDK"
           CC=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
           AR=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar
           SYSROOT=$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot
